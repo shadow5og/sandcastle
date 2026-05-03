@@ -2020,6 +2020,124 @@ describe("InitService scaffold", () => {
         access(join(dir, ".sandcastle", "Containerfile")),
       ).rejects.toThrow();
     });
+    it("detects pnpm from pnpm-lock.yaml and installs pnpm in Dockerfile", async () => {
+      const dir = await makeDir();
+      await writeFile(join(dir, "pnpm-lock.yaml"), "lockfileVersion: '6.0'\n");
+      await runScaffold(dir, {
+        agent: claudeCodeAgent,
+        model: "claude-opus-4-6",
+      });
+
+      const dockerfile = await readFile(
+        join(dir, ".sandcastle", "Dockerfile"),
+        "utf-8",
+      );
+      expect(dockerfile).toContain("corepack enable");
+      expect(dockerfile).not.toContain("{{PACKAGE_MANAGER_TOOLS}}");
+    });
+
+    it("detects yarn from yarn.lock and installs yarn in Dockerfile", async () => {
+      const dir = await makeDir();
+      await writeFile(join(dir, "yarn.lock"), "# yarn lockfile v1\n");
+      await runScaffold(dir, {
+        agent: claudeCodeAgent,
+        model: "claude-opus-4-6",
+      });
+
+      const dockerfile = await readFile(
+        join(dir, ".sandcastle", "Dockerfile"),
+        "utf-8",
+      );
+      expect(dockerfile).toContain("corepack enable");
+      expect(dockerfile).not.toContain("{{PACKAGE_MANAGER_TOOLS}}");
+    });
+
+    it("detects npm from package-lock.json and omits extra install snippet", async () => {
+      const dir = await makeDir();
+      await writeFile(
+        join(dir, "package-lock.json"),
+        '{"lockfileVersion": 3}\n',
+      );
+      await runScaffold(dir, {
+        agent: claudeCodeAgent,
+        model: "claude-opus-4-6",
+      });
+
+      const dockerfile = await readFile(
+        join(dir, ".sandcastle", "Dockerfile"),
+        "utf-8",
+      );
+      // npm is pre-installed with Node; no extra snippet needed
+      expect(dockerfile).not.toContain("corepack enable");
+      expect(dockerfile).not.toContain("{{PACKAGE_MANAGER_TOOLS}}");
+    });
+
+    it("detects pnpm in Alpine Dockerfile via corepack", async () => {
+      const dir = await makeDir();
+      await writeFile(join(dir, "pnpm-lock.yaml"), "lockfileVersion: '6.0'\n");
+      await runScaffold(dir, {
+        agent: claudeCodeAgent,
+        model: "claude-opus-4-6",
+        alpine: true,
+      });
+
+      const dockerfile = await readFile(
+        join(dir, ".sandcastle", "Dockerfile"),
+        "utf-8",
+      );
+      expect(dockerfile).toContain("FROM node:22-alpine");
+      expect(dockerfile).toContain("corepack enable");
+      expect(dockerfile).not.toContain("{{PACKAGE_MANAGER_TOOLS}}");
+    });
+
+    it("rewrites npm install to pnpm install in main.mts when pnpm is detected", async () => {
+      const dir = await makeDir();
+      await writeFile(join(dir, "pnpm-lock.yaml"), "lockfileVersion: '6.0'\n");
+      await runScaffold(dir, {
+        agent: claudeCodeAgent,
+        model: "claude-opus-4-6",
+        templateName: "simple-loop",
+      });
+
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      expect(mainTs).toContain('"pnpm install"');
+      expect(mainTs).not.toContain('"npm install"');
+    });
+
+    it("rewrites npm install to yarn install in main.mts when yarn is detected", async () => {
+      const dir = await makeDir();
+      await writeFile(join(dir, "yarn.lock"), "# yarn lockfile v1\n");
+      await runScaffold(dir, {
+        agent: claudeCodeAgent,
+        model: "claude-opus-4-6",
+        templateName: "simple-loop",
+      });
+
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      expect(mainTs).toContain('"yarn install"');
+      expect(mainTs).not.toContain('"npm install"');
+    });
+
+    it("keeps npm install in main.mts when no lockfile is present", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        agent: claudeCodeAgent,
+        model: "claude-opus-4-6",
+        templateName: "simple-loop",
+      });
+
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      expect(mainTs).toContain('"npm install"');
+    });
   });
 });
 

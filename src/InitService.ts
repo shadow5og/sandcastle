@@ -68,6 +68,8 @@ RUN apk add --no-cache \\
 
 {{BACKLOG_MANAGER_TOOLS}}
 
+{{PACKAGE_MANAGER_TOOLS}}
+
 # Replace default 'node' user (UID 1000) with 'agent'
 RUN deluser node 2>/dev/null \\
     && adduser -D -h /home/agent -u 1000 agent
@@ -100,6 +102,8 @@ RUN apt-get update && apt-get install -y \\
 
 {{BACKLOG_MANAGER_TOOLS}}
 
+{{PACKAGE_MANAGER_TOOLS}}
+
 # Rename the base image's "node" user (UID 1000) to "agent".
 # This keeps UID 1000 so that --userns=keep-id (Podman) and
 # --user 1000:1000 (Docker) map to the correct home directory owner.
@@ -129,6 +133,8 @@ RUN apk add --no-cache \\
     jq
 
 {{BACKLOG_MANAGER_TOOLS}}
+
+{{PACKAGE_MANAGER_TOOLS}}
 
 # Replace default 'node' user (UID 1000) with 'agent'
 RUN deluser node 2>/dev/null \\
@@ -166,6 +172,8 @@ RUN apt-get update && apt-get install -y \\
 
 {{BACKLOG_MANAGER_TOOLS}}
 
+{{PACKAGE_MANAGER_TOOLS}}
+
 # Rename the base image's "node" user (UID 1000) to "agent".
 # This keeps UID 1000 so that --userns=keep-id (Podman) and
 # --user 1000:1000 (Docker) map to the correct home directory owner.
@@ -199,6 +207,8 @@ RUN apk add --no-cache \\
 
 {{BACKLOG_MANAGER_TOOLS}}
 
+{{PACKAGE_MANAGER_TOOLS}}
+
 # Replace default 'node' user (UID 1000) with 'agent'
 RUN deluser node 2>/dev/null \\
     && adduser -D -h /home/agent -u 1000 agent
@@ -228,6 +238,8 @@ RUN apt-get update && apt-get install -y \\
   && rm -rf /var/lib/apt/lists/*
 
 {{BACKLOG_MANAGER_TOOLS}}
+
+{{PACKAGE_MANAGER_TOOLS}}
 
 # Rename the base image's "node" user (UID 1000) to "agent".
 # This keeps UID 1000 so that --userns=keep-id (Podman) and
@@ -262,6 +274,8 @@ RUN apk add --no-cache \\
 
 {{BACKLOG_MANAGER_TOOLS}}
 
+{{PACKAGE_MANAGER_TOOLS}}
+
 # Replace default 'node' user (UID 1000) with 'agent'
 RUN deluser node 2>/dev/null \\
     && adduser -D -h /home/agent -u 1000 agent
@@ -291,6 +305,8 @@ RUN apt-get update && apt-get install -y \\
   && rm -rf /var/lib/apt/lists/*
 
 {{BACKLOG_MANAGER_TOOLS}}
+
+{{PACKAGE_MANAGER_TOOLS}}
 
 # Rename the base image's "node" user (UID 1000) to "agent".
 # This keeps UID 1000 so that --userns=keep-id (Podman) and
@@ -682,6 +698,51 @@ const rewriteMainTs = (
   });
 
 /**
+ * When a non-npm package manager is detected, replace occurrences of
+ * `npm install` in the scaffolded main.ts and prompt files with the
+ * correct install command (e.g. `pnpm install`, `yarn install`).
+ */
+const rewritePackageManager = (
+  configDir: string,
+  packageManager: PackageManager,
+  mainFilename: string,
+): Effect.Effect<void, Error, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    if (packageManager === "npm") return;
+    const fs = yield* FileSystem.FileSystem;
+
+    const installCmd =
+      packageManager === "pnpm" ? "pnpm install" : "yarn install";
+
+    const files = [mainFilename, "prompt.md"];
+    const hasPlanPrompt = yield* fs
+      .exists(join(configDir, "plan-prompt.md"))
+      .pipe(Effect.orElseSucceed(() => false));
+    if (hasPlanPrompt) {
+      files.push("plan-prompt.md");
+    }
+
+    for (const f of files) {
+      const filePath = join(configDir, f);
+      const exists = yield* fs
+        .exists(filePath)
+        .pipe(Effect.orElseSucceed(() => false));
+      if (!exists) continue;
+      let content = yield* fs
+        .readFileString(filePath)
+        .pipe(Effect.mapError((e) => new Error(e.message)));
+      const original = content;
+      // Replace both quoted and unquoted occurrences in text files
+      if (content.includes("npm install")) {
+        content = content.replace(/"npm install"/g, `"${installCmd}"`);
+        yield* fs
+          .writeFileString(filePath, content)
+          .pipe(Effect.mapError((e) => new Error(e.message)));
+      }
+    }
+  });
+
+/**
  * When the user opted out of the Sandcastle label, strip ` --label Sandcastle`
  * from all `.md` files in the scaffolded config directory so that `gh issue list`
  * commands work without a label filter.
@@ -736,12 +797,12 @@ const isTextFile = (filename: string): boolean => {
 };
 
 /**
- * Replace `{{KEY}}` template arguments from the backlog manager's
- * `templateArgs` map in all text files in the scaffolded config directory.
+ * Replace `{{KEY}}` template arguments from the given map in all text files
+ * in the scaffolded config directory.
  */
 const substituteTemplateArgs = (
   configDir: string,
-  backlogManager: BacklogManagerEntry,
+  templateArgs: Record<string, string>,
 ): Effect.Effect<void, Error, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -757,9 +818,7 @@ const substituteTemplateArgs = (
             .readFileString(filePath)
             .pipe(Effect.mapError((e) => new Error(e.message)));
           const original = content;
-          for (const [key, value] of Object.entries(
-            backlogManager.templateArgs,
-          )) {
+          for (const [key, value] of Object.entries(templateArgs)) {
             content = content.replace(
               new RegExp(`\\{\\{${key}\\}\\}`, "g"),
               value,
@@ -791,9 +850,47 @@ export interface ScaffoldOptions {
   alpine?: boolean;
 }
 
+const PACKAGE_MANAGER_INSTALL_DEBIAN = {
+  npm: "",
+  yarn: "RUN corepack enable",
+  pnpm: "RUN corepack enable",
+} as const satisfies Record<PackageManager, string>;
+
+const PACKAGE_MANAGER_INSTALL_ALPINE = {
+  npm: "",
+  yarn: "RUN corepack enable",
+  pnpm: "RUN corepack enable",
+} as const satisfies Record<PackageManager, string>;
+
 export interface ScaffoldResult {
   mainFilename: string;
 }
+
+type PackageManager = "npm" | "yarn" | "pnpm";
+
+/**
+ * Detect the project's package manager from lockfile presence.
+ * Priority: pnpm-lock.yaml > yarn.lock > package-lock.json.
+ * Falls back to npm when no lockfile is found.
+ */
+const detectPackageManager = (
+  repoDir: string,
+): Effect.Effect<PackageManager, never, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const locks: { file: string; pm: PackageManager }[] = [
+      { file: "pnpm-lock.yaml", pm: "pnpm" },
+      { file: "yarn.lock", pm: "yarn" },
+      { file: "package-lock.json", pm: "npm" },
+    ];
+    for (const { file, pm } of locks) {
+      const exists = yield* fs
+        .exists(join(repoDir, file))
+        .pipe(Effect.orElseSucceed(() => false));
+      if (exists) return pm;
+    }
+    return "npm";
+  });
 
 /**
  * Detect whether the project's package.json has `"type": "module"`.
@@ -892,10 +989,18 @@ export const scaffold = (
     const activeTemplateArgs = options.alpine
       ? (backlogManager.templateArgsAlpine ?? backlogManager.templateArgs)
       : backlogManager.templateArgs;
-    yield* substituteTemplateArgs(configDir, {
-      ...backlogManager,
-      templateArgs: activeTemplateArgs,
-    });
+    const packageManager = yield* detectPackageManager(repoDir);
+    const packageManagerSnippet = options.alpine
+      ? PACKAGE_MANAGER_INSTALL_ALPINE[packageManager]
+      : PACKAGE_MANAGER_INSTALL_DEBIAN[packageManager];
+    const mergedTemplateArgs = {
+      ...activeTemplateArgs,
+      PACKAGE_MANAGER_TOOLS: packageManagerSnippet,
+    };
+    yield* substituteTemplateArgs(configDir, mergedTemplateArgs);
+
+    // Rewrite npm install references in templates to match detected package manager
+    yield* rewritePackageManager(configDir, packageManager, mainFilename);
 
     // Strip --label Sandcastle from prompt files when the user declined label creation
     if (!createLabel) {
