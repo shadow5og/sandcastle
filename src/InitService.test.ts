@@ -703,6 +703,8 @@ describe("InitService scaffold", () => {
     expect(dockerfile).toContain("npm cache clean --force");
     expect(dockerfile).toContain("settings.json");
     expect(dockerfile).toContain("chmod 777 /home/agent");
+    expect(dockerfile).not.toContain("apt-get");
+    expect(dockerfile).not.toContain("dpkg");
     expect(dockerfile).not.toContain("FROM node:22-bookworm");
   });
 
@@ -720,6 +722,9 @@ describe("InitService scaffold", () => {
     );
     expect(dockerfile).toContain("FROM node:22-alpine");
     expect(dockerfile).toContain("apk add --no-cache");
+    expect(dockerfile).toContain("apk add --no-cache github-cli");
+    expect(dockerfile).not.toContain("apt-get");
+    expect(dockerfile).not.toContain("dpkg");
     expect(dockerfile).not.toContain("FROM node:22-bookworm");
   });
 

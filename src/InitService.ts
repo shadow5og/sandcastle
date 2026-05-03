@@ -126,8 +126,7 @@ const PI_DOCKERFILE_ALPINE = `FROM node:22-alpine
 RUN apk add --no-cache \\
     git \\
     curl \\
-    jq \\
-    github-cli
+    jq
 
 {{BACKLOG_MANAGER_TOOLS}}
 
@@ -375,16 +374,26 @@ export interface BacklogManagerEntry {
     readonly CLOSE_TASK_COMMAND: string;
     readonly BACKLOG_MANAGER_TOOLS: string;
   };
+  /** Alpine counterpart of `templateArgs`. Used when `--alpine` is passed. */
+  readonly templateArgsAlpine?: {
+    readonly LIST_TASKS_COMMAND: string;
+    readonly VIEW_TASK_COMMAND: string;
+    readonly CLOSE_TASK_COMMAND: string;
+    readonly BACKLOG_MANAGER_TOOLS: string;
+  };
   /** Lines to append to `.env.example` for this backlog manager, or empty string if none needed. */
   readonly envExample: string;
 }
 
+const GITHUB_CLI_TOOLS_ALPINE = `# Install GitHub CLI
+RUN apk add --no-cache github-cli`;
+
 const GITHUB_CLI_TOOLS = `# Install GitHub CLI
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\
-  | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \\
-  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \\
-  | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \\
-  && apt-get update && apt-get install -y gh \\
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+  | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+  | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+  && apt-get update && apt-get install -y gh \
   && rm -rf /var/lib/apt/lists/*`;
 
 const BEADS_TOOLS = `# Install system dependencies for Beads
@@ -403,6 +412,8 @@ RUN corepack enable`;
 
 const NONE_TOOLS = `# No external backlog manager tools needed`;
 
+const NONE_TOOLS_ALPINE = NONE_TOOLS;
+
 const BACKLOG_MANAGER_REGISTRY: BacklogManagerEntry[] = [
   {
     name: "github-issues",
@@ -412,6 +423,12 @@ const BACKLOG_MANAGER_REGISTRY: BacklogManagerEntry[] = [
       VIEW_TASK_COMMAND: "gh issue view <ID>",
       CLOSE_TASK_COMMAND: `gh issue close <ID> --comment "Completed by Sandcastle"`,
       BACKLOG_MANAGER_TOOLS: GITHUB_CLI_TOOLS,
+    },
+    templateArgsAlpine: {
+      LIST_TASKS_COMMAND: `gh issue list --state open --label Sandcastle --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`,
+      VIEW_TASK_COMMAND: "gh issue view <ID>",
+      CLOSE_TASK_COMMAND: `gh issue close <ID> --comment "Completed by Sandcastle"`,
+      BACKLOG_MANAGER_TOOLS: GITHUB_CLI_TOOLS_ALPINE,
     },
     envExample: `# GitHub personal access token
 GH_TOKEN=`,
@@ -436,6 +453,13 @@ GH_TOKEN=`,
       VIEW_TASK_COMMAND: 'echo "No backlog manager configured."',
       CLOSE_TASK_COMMAND: 'echo "No backlog manager configured."',
       BACKLOG_MANAGER_TOOLS: NONE_TOOLS,
+    },
+    templateArgsAlpine: {
+      LIST_TASKS_COMMAND:
+        'echo "No backlog manager configured. Tasks should be passed via promptArgs or inline prompts."',
+      VIEW_TASK_COMMAND: 'echo "No backlog manager configured."',
+      CLOSE_TASK_COMMAND: 'echo "No backlog manager configured."',
+      BACKLOG_MANAGER_TOOLS: NONE_TOOLS_ALPINE,
     },
     envExample: "",
   },
@@ -865,7 +889,13 @@ export const scaffold = (
     yield* rewriteMainTs(configDir, agent, model, mainFilename);
 
     // Replace backlog manager template arguments in all text files (must run before label stripping)
-    yield* substituteTemplateArgs(configDir, backlogManager);
+    const activeTemplateArgs = options.alpine
+      ? (backlogManager.templateArgsAlpine ?? backlogManager.templateArgs)
+      : backlogManager.templateArgs;
+    yield* substituteTemplateArgs(configDir, {
+      ...backlogManager,
+      templateArgs: activeTemplateArgs,
+    });
 
     // Strip --label Sandcastle from prompt files when the user declined label creation
     if (!createLabel) {
