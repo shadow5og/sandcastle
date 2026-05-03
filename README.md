@@ -616,6 +616,7 @@ Scaffolds the `.sandcastle/` config directory and builds the container image. Th
 | `--agent`      | No       | Interactive prompt           | Agent to use (`claude-code`, `pi`, `codex`, `opencode`)              |
 | `--model`      | No       | Agent's default model        | Model to use (e.g. `claude-sonnet-4-6`). Defaults to agent's default |
 | `--template`   | No       | Interactive prompt           | Template to scaffold (e.g. `blank`, `simple-loop`)                   |
+| `--alpine`     | No       | `false`                      | Use Alpine-based Dockerfile (~75% smaller image)                     |
 
 Creates the following files:
 

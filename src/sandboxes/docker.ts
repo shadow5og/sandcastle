@@ -268,5 +268,34 @@ export const docker = (options?: DockerOptions): SandboxProvider => {
   });
 };
 
+// ---------------------------------------------------------------------------
+// Minimal pi mounts helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal mount set for the pi agent inside a Docker sandbox.
+ *
+ * Mounts ONLY what pi needs — not the full `~/.pi` directory.
+ * Full ~/.pi mount triggers auto-install of host extensions (1.5GB+ bloat).
+ *
+ * Usage:
+ *   import { docker, piMinimalMounts } from "@ai-hero/sandcastle/sandboxes/docker";
+ *   const userMounts = piMinimalMounts;
+ *   // or append more mounts:
+ *   // const userMounts = [...piMinimalMounts, { hostPath: "...", sandboxPath: "..." }];
+ *   await run({ agent: pi("deepseek-v4-pro:cloud"), sandbox: docker({ mounts: userMounts }) });
+ */
+export const piMinimalMounts: MountConfig[] = [
+  {
+    hostPath: "~/.pi/agent/auth.json",
+    sandboxPath: "/home/agent/.pi/agent/auth.json",
+  },
+  {
+    hostPath: "~/.pi/agent/models.json",
+    sandboxPath: "/home/agent/.pi/agent/models.json",
+  },
+  { hostPath: "~/.agents/skills", sandboxPath: "/home/agent/.pi/agent/skills" },
+];
+
 // Re-export for backwards compatibility
 export { defaultImageName };

@@ -89,6 +89,13 @@ const initModelOption = Options.text("model").pipe(
   Options.optional,
 );
 
+const alpineOption = Options.boolean("alpine").pipe(
+  Options.withDescription(
+    "Use an Alpine-based Dockerfile (smaller image, faster builds)",
+  ),
+  Options.optional,
+);
+
 const initCommand = Command.make(
   "init",
   {
@@ -96,12 +103,14 @@ const initCommand = Command.make(
     template: templateOption,
     agent: agentOption,
     model: initModelOption,
+    alpine: alpineOption,
   },
   ({
     imageName: imageNameFlag,
     template,
     agent: agentFlag,
     model: modelFlag,
+    alpine: alpineFlag,
   }) =>
     Effect.gen(function* () {
       const d = yield* Display;
@@ -256,6 +265,9 @@ const initCommand = Command.make(
         }
       }
 
+      const shouldAlpine =
+        alpineFlag._tag === "Some" ? alpineFlag.value : false;
+
       const scaffoldResult = yield* d.spinner(
         "Scaffolding .sandcastle/ config directory...",
         scaffold(cwd, {
@@ -265,6 +277,7 @@ const initCommand = Command.make(
           createLabel: shouldCreateLabel === true,
           backlogManager: selectedBacklogManager,
           sandboxProvider: selectedSandboxProvider,
+          alpine: shouldAlpine,
         }).pipe(
           Effect.mapError(
             (e) =>
@@ -309,6 +322,7 @@ const initCommand = Command.make(
       const nextSteps = getNextStepsLines(
         selectedTemplate,
         scaffoldResult.mainFilename,
+        { agent: selectedAgent.name, alpine: shouldAlpine },
       );
       for (const [i, line] of nextSteps.entries()) {
         yield* d.text(i === 0 ? line : styleText("dim", line));

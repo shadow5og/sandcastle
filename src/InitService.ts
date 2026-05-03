@@ -52,9 +52,42 @@ export interface AgentEntry {
   readonly defaultModel: string;
   readonly factoryImport: string;
   readonly dockerfileTemplate: string;
+  /** Optional Alpine variant of the Dockerfile template. */
+  readonly dockerfileTemplateAlpine?: string;
   /** Lines to include in the generated `.env.example` for this agent's API key. */
   readonly envExample: string;
 }
+
+const CLAUDE_CODE_DOCKERFILE_ALPINE = `FROM node:22-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \\
+    git \\
+    curl \\
+    jq
+
+{{BACKLOG_MANAGER_TOOLS}}
+
+# Replace default 'node' user (UID 1000) with 'agent'
+RUN deluser node 2>/dev/null \\
+    && adduser -D -h /home/agent -u 1000 agent
+
+# Install Claude Code CLI
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Fix permissions for macOS Docker UID mismatch
+RUN chmod 777 /home/agent \\
+    && touch /home/agent/.gitconfig \\
+    && chmod 666 /home/agent/.gitconfig
+
+# Add Claude to PATH
+ENV PATH="/home/agent/.local/bin:$PATH"
+
+USER agent
+WORKDIR /home/agent
+
+ENTRYPOINT ["sleep", "infinity"]
+`;
 
 const CLAUDE_CODE_DOCKERFILE = `FROM node:22-bookworm
 
@@ -87,6 +120,42 @@ WORKDIR /home/agent
 ENTRYPOINT ["sleep", "infinity"]
 `;
 
+const PI_DOCKERFILE_ALPINE = `FROM node:22-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \\
+    git \\
+    curl \\
+    jq \\
+    github-cli
+
+{{BACKLOG_MANAGER_TOOLS}}
+
+# Replace default 'node' user (UID 1000) with 'agent'
+RUN deluser node 2>/dev/null \\
+    && adduser -D -h /home/agent -u 1000 agent
+
+# Install pi coding agent globally, then clean npm cache
+RUN npm install -g @mariozechner/pi-coding-agent \\
+    && npm cache clean --force
+
+# Create minimal sandbox-specific pi config (no packages to avoid auto-install)
+RUN mkdir -p /home/agent/.pi/agent \\
+    && printf '{"defaultModel":"deepseek-v4-pro:cloud","defaultProvider":"ollama","defaultThinkingLevel":"off"}\\n' \\
+       > /home/agent/.pi/agent/settings.json
+
+# Fix permissions: on macOS, Docker runs with host UID (e.g. 501),
+# not the container's UID 1000. Make home and .gitconfig world-writable.
+RUN chmod 777 /home/agent \\
+    && touch /home/agent/.gitconfig \\
+    && chmod 666 /home/agent/.gitconfig
+
+USER agent
+WORKDIR /home/agent
+
+ENTRYPOINT ["sleep", "infinity"]
+`;
+
 const PI_DOCKERFILE = `FROM node:22-bookworm
 
 # Install system dependencies
@@ -106,6 +175,11 @@ RUN usermod -d /home/agent -m -l agent node
 # Install pi coding agent (run as root before USER agent)
 RUN npm install -g @mariozechner/pi-coding-agent
 
+# Fix permissions for macOS Docker UID mismatch
+RUN chmod 777 /home/agent \\
+    && touch /home/agent/.gitconfig \\
+    && chmod 666 /home/agent/.gitconfig
+
 USER agent
 
 WORKDIR /home/agent
@@ -113,6 +187,35 @@ WORKDIR /home/agent
 # In worktree sandbox mode, Sandcastle bind-mounts the git worktree at ${SANDBOX_REPO_DIR}
 # and overrides the working directory to ${SANDBOX_REPO_DIR} at container start.
 # Structure your Dockerfile so that ${SANDBOX_REPO_DIR} can serve as the project root.
+ENTRYPOINT ["sleep", "infinity"]
+`;
+
+const CODEX_DOCKERFILE_ALPINE = `FROM node:22-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \\
+    git \\
+    curl \\
+    jq
+
+{{BACKLOG_MANAGER_TOOLS}}
+
+# Replace default 'node' user (UID 1000) with 'agent'
+RUN deluser node 2>/dev/null \\
+    && adduser -D -h /home/agent -u 1000 agent
+
+# Install Codex CLI globally, then clean npm cache
+RUN npm install -g @openai/codex \\
+    && npm cache clean --force
+
+# Fix permissions for macOS Docker UID mismatch
+RUN chmod 777 /home/agent \\
+    && touch /home/agent/.gitconfig \\
+    && chmod 666 /home/agent/.gitconfig
+
+USER agent
+WORKDIR /home/agent
+
 ENTRYPOINT ["sleep", "infinity"]
 `;
 
@@ -135,6 +238,11 @@ RUN usermod -d /home/agent -m -l agent node
 # Install Codex CLI (run as root before USER agent)
 RUN npm install -g @openai/codex
 
+# Fix permissions for macOS Docker UID mismatch
+RUN chmod 777 /home/agent \\
+    && touch /home/agent/.gitconfig \\
+    && chmod 666 /home/agent/.gitconfig
+
 USER agent
 
 WORKDIR /home/agent
@@ -142,6 +250,35 @@ WORKDIR /home/agent
 # In worktree sandbox mode, Sandcastle bind-mounts the git worktree at ${SANDBOX_REPO_DIR}
 # and overrides the working directory to ${SANDBOX_REPO_DIR} at container start.
 # Structure your Dockerfile so that ${SANDBOX_REPO_DIR} can serve as the project root.
+ENTRYPOINT ["sleep", "infinity"]
+`;
+
+const OPENCODE_DOCKERFILE_ALPINE = `FROM node:22-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \\
+    git \\
+    curl \\
+    jq
+
+{{BACKLOG_MANAGER_TOOLS}}
+
+# Replace default 'node' user (UID 1000) with 'agent'
+RUN deluser node 2>/dev/null \\
+    && adduser -D -h /home/agent -u 1000 agent
+
+# Install OpenCode CLI globally, then clean npm cache
+RUN npm install -g opencode-ai@latest \\
+    && npm cache clean --force
+
+# Fix permissions for macOS Docker UID mismatch
+RUN chmod 777 /home/agent \\
+    && touch /home/agent/.gitconfig \\
+    && chmod 666 /home/agent/.gitconfig
+
+USER agent
+WORKDIR /home/agent
+
 ENTRYPOINT ["sleep", "infinity"]
 `;
 
@@ -164,6 +301,11 @@ RUN usermod -d /home/agent -m -l agent node
 # Install OpenCode CLI (run as root before USER agent)
 RUN npm install -g opencode-ai@latest
 
+# Fix permissions for macOS Docker UID mismatch
+RUN chmod 777 /home/agent \\
+    && touch /home/agent/.gitconfig \\
+    && chmod 666 /home/agent/.gitconfig
+
 USER agent
 
 WORKDIR /home/agent
@@ -181,6 +323,7 @@ const AGENT_REGISTRY: AgentEntry[] = [
     defaultModel: "claude-opus-4-6",
     factoryImport: "claudeCode",
     dockerfileTemplate: CLAUDE_CODE_DOCKERFILE,
+    dockerfileTemplateAlpine: CLAUDE_CODE_DOCKERFILE_ALPINE,
     envExample: `# Anthropic API key
 # If you want to use your Claude subscription instead of an API key, see https://github.com/mattpocock/sandcastle/issues/191
 ANTHROPIC_API_KEY=`,
@@ -191,6 +334,7 @@ ANTHROPIC_API_KEY=`,
     defaultModel: "claude-sonnet-4-6",
     factoryImport: "pi",
     dockerfileTemplate: PI_DOCKERFILE,
+    dockerfileTemplateAlpine: PI_DOCKERFILE_ALPINE,
     envExample: `# Anthropic API key
 ANTHROPIC_API_KEY=`,
   },
@@ -200,6 +344,7 @@ ANTHROPIC_API_KEY=`,
     defaultModel: "gpt-5.4-mini",
     factoryImport: "codex",
     dockerfileTemplate: CODEX_DOCKERFILE,
+    dockerfileTemplateAlpine: CODEX_DOCKERFILE_ALPINE,
     envExample: `# OpenAI API key
 OPENAI_KEY=`,
   },
@@ -209,6 +354,7 @@ OPENAI_KEY=`,
     defaultModel: "opencode/big-pickle",
     factoryImport: "opencode",
     dockerfileTemplate: OPENCODE_DOCKERFILE,
+    dockerfileTemplateAlpine: OPENCODE_DOCKERFILE_ALPINE,
     envExample: `# OpenCode API key
 OPENCODE_API_KEY=`,
   },
@@ -255,6 +401,8 @@ RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/i
 
 RUN corepack enable`;
 
+const NONE_TOOLS = `# No external backlog manager tools needed`;
+
 const BACKLOG_MANAGER_REGISTRY: BacklogManagerEntry[] = [
   {
     name: "github-issues",
@@ -276,6 +424,18 @@ GH_TOKEN=`,
       VIEW_TASK_COMMAND: "bd show <ID>",
       CLOSE_TASK_COMMAND: `bd close <ID> "Completed by Sandcastle"`,
       BACKLOG_MANAGER_TOOLS: BEADS_TOOLS,
+    },
+    envExample: "",
+  },
+  {
+    name: "none",
+    label: "None (local-only repo)",
+    templateArgs: {
+      LIST_TASKS_COMMAND:
+        'echo "No backlog manager configured. Tasks should be passed via promptArgs or inline prompts."',
+      VIEW_TASK_COMMAND: 'echo "No backlog manager configured."',
+      CLOSE_TASK_COMMAND: 'echo "No backlog manager configured."',
+      BACKLOG_MANAGER_TOOLS: NONE_TOOLS,
     },
     envExample: "",
   },
@@ -335,17 +495,25 @@ export const getSandboxProvider = (
 export function getNextStepsLines(
   template: string,
   mainFilename: string,
+  options?: { agent?: string; alpine?: boolean },
 ): string[] {
+  const isPi = options?.agent === "pi";
   if (template === "blank") {
-    return [
+    const lines: string[] = [
       "Next steps:",
       `1. Set the required env vars in .sandcastle/.env (see .sandcastle/.env.example)`,
       "   If you want to use your Claude subscription instead of an API key, see https://github.com/mattpocock/sandcastle/issues/191",
       "2. Read and customize .sandcastle/prompt.md to describe what you want the agent to do",
       `3. Customize .sandcastle/${mainFilename} — it uses the JS API (\`run()\`) to control how the agent runs`,
       `4. Add "sandcastle": "npx tsx .sandcastle/${mainFilename}" to your package.json scripts`,
-      "5. Run `npm run sandcastle` to start the agent",
     ];
+    if (isPi) {
+      lines.push(
+        "   If using local models (Ollama), ensure host.docker.internal resolves to 127.0.0.1 on your host",
+      );
+    }
+    lines.push("5. Run `npm run sandcastle` to start the agent");
+    return lines;
   } else {
     const hasReviewer = template.includes("review");
     let step = 1;
@@ -360,6 +528,16 @@ export function getNextStepsLines(
     if (hasReviewer) {
       lines.push(
         `${step++}. Customize .sandcastle/CODING_STANDARDS.md with your project's standards — the reviewer agent loads it during review`,
+      );
+    }
+    if (isPi) {
+      lines.push(
+        `${step++}. If using local models (Ollama), ensure host.docker.internal resolves to 127.0.0.1 on your host`,
+      );
+    }
+    if (options?.alpine) {
+      lines.push(
+        `${step++}. Your Dockerfile uses Alpine Linux — much smaller image, but some npm packages with native deps may need rebuilding inside the sandbox`,
       );
     }
     lines.push(`${step++}. Run \`npm run sandcastle\` to start the agent`);
@@ -585,6 +763,8 @@ export interface ScaffoldOptions {
   createLabel?: boolean;
   backlogManager?: BacklogManagerEntry;
   sandboxProvider?: SandboxProviderEntry;
+  /** When true, generate an Alpine-based Dockerfile instead of the default Debian bookworm image. */
+  alpine?: boolean;
 }
 
 export interface ScaffoldResult {
@@ -658,12 +838,16 @@ export const scaffold = (
     }
     const envExampleContent = envExampleParts.join("\n") + "\n";
 
+    const dockerfileTemplate = options.alpine
+      ? (agent.dockerfileTemplateAlpine ?? agent.dockerfileTemplate)
+      : agent.dockerfileTemplate;
+
     yield* Effect.all(
       [
         fs
           .writeFileString(
             join(configDir, sandboxProvider.containerfileName),
-            agent.dockerfileTemplate,
+            dockerfileTemplate,
           )
           .pipe(Effect.mapError((e) => new Error(e.message))),
         fs
