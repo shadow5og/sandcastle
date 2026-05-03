@@ -5,6 +5,12 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 // Run this with: npx tsx .sandcastle/main.mts
 // Or add to package.json scripts: "sandcastle": "npx tsx .sandcastle/main.mts"
 
+// When using the pi agent with local models (Ollama, LM Studio), add mounts for
+// pi config and skills so the sandbox can reach your local model and tools:
+//
+//   import { docker, piMinimalMounts } from "@ai-hero/sandcastle/sandboxes/docker";
+//   sandbox: docker({ mounts: piMinimalMounts }),
+
 await run({
   // A name for this run, shown as a prefix in log output.
   name: "worker",

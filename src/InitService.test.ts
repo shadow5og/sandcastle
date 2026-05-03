@@ -643,6 +643,34 @@ describe("InitService scaffold", () => {
       const joined = lines.join("\n");
       expect(joined).not.toContain("CODING_STANDARDS.md");
     });
+
+    it("pi agent mentions host.docker.internal in blank next steps", () => {
+      const lines = getNextStepsLines("blank", "main.mts", { agent: "pi" });
+      const joined = lines.join("\n");
+      expect(joined).toContain("host.docker.internal");
+    });
+
+    it("pi agent mentions host.docker.internal in simple-loop next steps", () => {
+      const lines = getNextStepsLines("simple-loop", "main.mts", {
+        agent: "pi",
+      });
+      const joined = lines.join("\n");
+      expect(joined).toContain("host.docker.internal");
+    });
+
+    it("alpine option adds Alpine note to simple-loop next steps", () => {
+      const lines = getNextStepsLines("simple-loop", "main.mts", {
+        alpine: true,
+      });
+      const joined = lines.join("\n");
+      expect(joined).toContain("Alpine Linux");
+    });
+
+    it("blank template next steps do not contain Alpine note by default", () => {
+      const lines = getNextStepsLines("blank", "main.mts");
+      const joined = lines.join("\n");
+      expect(joined).not.toContain("Alpine Linux");
+    });
   });
 
   it("scaffolds pi agent with pi Dockerfile", async () => {
@@ -656,6 +684,43 @@ describe("InitService scaffold", () => {
     expect(dockerfile).toContain("FROM node:22-bookworm");
     expect(dockerfile).toContain("@mariozechner/pi-coding-agent");
     expect(dockerfile).not.toContain("{{BACKLOG_MANAGER_TOOLS}}");
+  });
+
+  it("scaffolds pi agent with Alpine Dockerfile when alpine is true", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir, {
+      agent: piAgent,
+      model: "claude-sonnet-4-6",
+      alpine: true,
+    });
+
+    const dockerfile = await readFile(
+      join(dir, ".sandcastle", "Dockerfile"),
+      "utf-8",
+    );
+    expect(dockerfile).toContain("FROM node:22-alpine");
+    expect(dockerfile).toContain("@mariozechner/pi-coding-agent");
+    expect(dockerfile).toContain("npm cache clean --force");
+    expect(dockerfile).toContain("settings.json");
+    expect(dockerfile).toContain("chmod 777 /home/agent");
+    expect(dockerfile).not.toContain("FROM node:22-bookworm");
+  });
+
+  it("scaffolds claude-code agent with Alpine Dockerfile when alpine is true", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir, {
+      agent: claudeCodeAgent,
+      model: "claude-opus-4-6",
+      alpine: true,
+    });
+
+    const dockerfile = await readFile(
+      join(dir, ".sandcastle", "Dockerfile"),
+      "utf-8",
+    );
+    expect(dockerfile).toContain("FROM node:22-alpine");
+    expect(dockerfile).toContain("apk add --no-cache");
+    expect(dockerfile).not.toContain("FROM node:22-bookworm");
   });
 
   it("scaffolds main.mts with pi factory import when pi agent selected", async () => {
@@ -1141,10 +1206,11 @@ describe("InitService scaffold", () => {
   // --- Backlog manager ---
 
   describe("Backlog manager registry", () => {
-    it("listBacklogManagers returns github-issues and beads", () => {
+    it("listBacklogManagers returns github-issues, beads, and none", () => {
       const managers = listBacklogManagers();
       expect(managers.some((m) => m.name === "github-issues")).toBe(true);
       expect(managers.some((m) => m.name === "beads")).toBe(true);
+      expect(managers.some((m) => m.name === "none")).toBe(true);
     });
 
     it("getBacklogManager returns github-issues entry with expected templateArgs", () => {
@@ -1189,6 +1255,19 @@ describe("InitService scaffold", () => {
       );
     });
 
+    it("getBacklogManager returns none entry with expected templateArgs", () => {
+      const manager = getBacklogManager("none");
+      expect(manager).toBeDefined();
+      expect(manager!.label).toBe("None (local-only repo)");
+      expect(manager!.templateArgs.LIST_TASKS_COMMAND).toContain("echo");
+      expect(manager!.templateArgs.VIEW_TASK_COMMAND).toContain("echo");
+      expect(manager!.templateArgs.CLOSE_TASK_COMMAND).toContain("echo");
+      expect(manager!.templateArgs.BACKLOG_MANAGER_TOOLS).toContain(
+        "No external backlog manager",
+      );
+      expect(manager!.envExample).toBe("");
+    });
+
     it("getBacklogManager returns undefined for unknown manager", () => {
       expect(getBacklogManager("nonexistent")).toBeUndefined();
     });
@@ -1230,6 +1309,30 @@ describe("InitService scaffold", () => {
       expect(prompt).not.toContain("gh issue");
       expect(prompt).not.toContain("{{LIST_TASKS_COMMAND}}");
       expect(prompt).not.toContain("{{CLOSE_TASK_COMMAND}}");
+    });
+
+    it("simple-loop with none backlog manager produces prompt with echo commands, no gh", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "simple-loop",
+        backlogManager: getBacklogManager("none"),
+      });
+
+      const prompt = await readFile(
+        join(dir, ".sandcastle", "prompt.md"),
+        "utf-8",
+      );
+      expect(prompt).toContain("echo");
+      expect(prompt).not.toContain("gh issue");
+      expect(prompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+      expect(prompt).not.toContain("{{CLOSE_TASK_COMMAND}}");
+
+      const dockerfile = await readFile(
+        join(dir, ".sandcastle", "Dockerfile"),
+        "utf-8",
+      );
+      expect(dockerfile).toContain("No external backlog manager");
+      expect(dockerfile).not.toContain("GitHub CLI");
     });
 
     it("simple-loop with beads skips --label Sandcastle (no label to strip)", async () => {
