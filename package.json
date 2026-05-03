@@ -1,6 +1,6 @@
 {
   "name": "@ai-hero/sandcastle",
-  "version": "0.5.7",
+  "version": "0.6.0",
   "description": "CLI for orchestrating AI agents in isolated sandbox environments",
   "type": "module",
   "main": "./dist/index.js",
@@ -45,6 +45,11 @@
     "prepare": "husky",
     "release": "changeset publish",
     "sandcastle": "npm run build && tsx .sandcastle/run.ts",
+    "sc": "node dist/main.js",
+    "sc:build": "npm run build && node dist/main.js",
+    "local-install": "echo 'npm install --save-dev \"file:$(pwd)\"'",
+    "link-local": "npm link && echo \"Run 'npm link @ai-hero/sandcastle' in target project\"",
+    "use-fork": "echo \"Options:\n  1. Relative: npm install --save-dev 'file:$(pwd)'\n  2. GitHub: npm install --save-dev github:shadow5og/sandcastle\n  3. Global link: npm run link-local\n  4. Shell alias: alias sc='node $(pwd)/dist/main.js'\"",
     "test-podman": "npm run build && tsx --env-file=.sandcastle/.env .sandcastle/test-podman.ts",
     "test-vercel": "npm run build && tsx --env-file=.sandcastle/.env .sandcastle/test-vercel.ts",
     "test-interactive": "npm run build && tsx --env-file=.sandcastle/.env .sandcastle/test-interactive.ts"
